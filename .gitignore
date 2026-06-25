@@ -1,0 +1,41 @@
+# =========================
+# JUCE & Projucer
+# =========================
+Builds/
+JuceLibraryCode/
+
+# =========================
+# Visual Studio
+# =========================
+.vs/
+*.user
+*.suo
+*.db
+*.opendb
+*.VC.db
+
+# =========================
+# Binarios y Compilados (Por si acaso)
+# =========================
+*.dll
+*.exe
+*.vst3
+*.obj
+*.pdb
+*.lib
+*.exp
+*.ilk
+
+# =========================
+# Logs de Compilación
+# =========================
+*.tlog
+*.log
+*.lastbuildstate
+unsuccessfulbuild
+
+# =========================
+# Archivos de Sistema Operativo
+# =========================
+.DS_Store
+Thumbs.db
