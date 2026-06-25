@@ -38,7 +38,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout OsarioDelayDestroyerAudioPro
         "FEEDBACK", "Retroalimentacion", 0.0f, 1, 0.5f));   
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "MIX", "Mezcla (Mix)", 0.0f, 1.0f, 0.5f));
-
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        "HARSHNESS", "Dureza", 0.0f, 1.0f, 0.5f));
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(//esto seria un switch de 3 posiciones
+        "CUTOFF",
+        "Cutoff Mode",
+        juce::StringArray{ "Plano (Todo)", "Medios (0.4)", "Agudos (0.75)" }, // Los nombres de tus 3 posiciones
+        0 // El índice por defecto (0 = Plano)
+    ));
     return { params.begin(), params.end() };
 }
 
@@ -176,7 +183,7 @@ float OsarioDelayDestroyerAudioProcessor::readFromDelay(int channel, float delay
     return delayBuffer.getSample(channel, readIndex);
 }
 
-void OsarioDelayDestroyerAudioProcessor::executeFFTMutilation(int channel, float destructionFactor)
+void OsarioDelayDestroyerAudioProcessor::executeFFTMutilation(int channel, float destructionFactor, float harshness, float cutoffValue)
 {
     // Ventana Senoidal de Análisis y copia al buffer
     for (int k = 0; k < fftSize; ++k)
@@ -200,6 +207,7 @@ void OsarioDelayDestroyerAudioProcessor::executeFFTMutilation(int channel, float
     }
 
     float dynamicThreshold = maxMagnitude * destructionFactor;
+    float maxTiltMultiplier = harshness * 12.0f;
 
     for (int i = 0; i < fftSize * 2; i += 2)
     {
@@ -207,9 +215,11 @@ void OsarioDelayDestroyerAudioProcessor::executeFFTMutilation(int channel, float
         float imag = fftData[channel][i + 1];
         float magnitude = std::sqrt((real * real) + (imag * imag));
 
-        // Inclinación espectral (destruye agudos más rápido)
+        
         float progress = (float)i / (float)(fftSize * 2);
-        float aggressiveTilt = 1.0f + std::pow(progress, 2.0f) * 8.0f;
+        float shiftedProgress = std::max(0.0f, progress - cutoffValue);
+
+        float aggressiveTilt = 1.0f + std::pow(shiftedProgress, 2.0f) * maxTiltMultiplier;
         float currentThreshold = dynamicThreshold * aggressiveTilt;
 
         if (magnitude < currentThreshold)
@@ -250,7 +260,7 @@ void OsarioDelayDestroyerAudioProcessor::executeFFTMutilation(int channel, float
     }
 }
 
-float OsarioDelayDestroyerAudioProcessor::processSpectralCrush(int channel, float wetSample, float destructionFactor)
+float OsarioDelayDestroyerAudioProcessor::processSpectralCrush(int channel, float wetSample, float destructionFactor, float harshness, float cutoffValue)
 {
     // Tamaño del salto (50% de superposición)
     int hopSize = fftSize / 2;
@@ -271,13 +281,10 @@ float OsarioDelayDestroyerAudioProcessor::processSpectralCrush(int channel, floa
     // EJECUTAR AL 50% DE LLENADO
     if (fifoIndex[channel] >= fftSize)
     {
-        executeFFTMutilation(channel, destructionFactor);
+        executeFFTMutilation(channel, destructionFactor, harshness, cutoffValue);
 
-        // Movemos las últimas 256 muestras al principio del embudo. 
-        // Así, el siguiente bloque mezclará el pasado inmediato con el futuro.
+        int hopSize = fftSize / 2;
         std::copy(fifo[channel].begin() + hopSize, fifo[channel].end(), fifo[channel].begin());
-
-        // El próximo sample entrará a partir de la mitad
         fifoIndex[channel] = hopSize;
     }
 
@@ -298,6 +305,13 @@ void OsarioDelayDestroyerAudioProcessor::processBlock(juce::AudioBuffer<float>& 
     float delayTime = apvts.getRawParameterValue("DELAYTIME")->load();
     float feedback = apvts.getRawParameterValue("FEEDBACK")->load();
     float mix = apvts.getRawParameterValue("MIX")->load();
+    float harshness = apvts.getRawParameterValue("HARSHNESS")->load();
+
+    int cutoffIndex = static_cast<int>(apvts.getRawParameterValue("CUTOFF")->load());
+
+    float cutoffValue = 0.0f;
+    if (cutoffIndex == 1) cutoffValue = 0.4f;
+    if (cutoffIndex == 2) cutoffValue = 0.75f;
 
     // Pre-calcular el factor de destrucción para ahorrar CPU
     float normValue = (16.0f - bitDepth) / 15.0f; // Va de 0.0 a 1.0
@@ -320,7 +334,7 @@ void OsarioDelayDestroyerAudioProcessor::processBlock(juce::AudioBuffer<float>& 
             float wetSample = readFromDelay(channel, delayTime, localWriteIndex);
 
             // Destruir (FFT MP3 Effect) 
-            float processedSample = processSpectralCrush(channel, wetSample, destructionFactor);
+            float processedSample = processSpectralCrush(channel, wetSample, destructionFactor, harshness, cutoffValue);
             
 
             // Escribir al futuro (Feedback)

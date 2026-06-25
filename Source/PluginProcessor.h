@@ -56,8 +56,8 @@ public:
 
     // Funciones de utilidades
     float readFromDelay(int channel, float delayTimeInSecs, int currentIndex);
-    float processSpectralCrush(int channel, float wetSample, float destructionFactor);
-    void executeFFTMutilation(int channel, float destructionFactor);
+    float processSpectralCrush(int channel, float wetSample, float destructionFactor, float harshness, float cutoffValue);
+    void executeFFTMutilation(int channel, float destructionFactor, float harshness, float cutoffValue);
 
 
 private:
