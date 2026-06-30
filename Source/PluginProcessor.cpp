@@ -217,8 +217,8 @@ void OsarioDelayDestroyerAudioProcessor::executeFFTMutilation(int channel, float
         if (mag > maxMagnitude) maxMagnitude = mag;
     }
 
-    float dynamicThreshold = maxMagnitude * destructionFactor;
-    float maxTiltMultiplier = harshness * 12.0f;
+    float dynamicThreshold = maxMagnitude * (destructionFactor * 0.6f);
+    float maxTiltMultiplier = harshness * 24.0f;
 
     for (int i = 0; i < fftSize * 2; i += 2)
     {
@@ -245,7 +245,7 @@ void OsarioDelayDestroyerAudioProcessor::executeFFTMutilation(int channel, float
             float phase = std::atan2(imag, real);
 
             // Reducimos los escalones disponibles de volumen (textura robótica/MP3 viejo)
-            float steps = std::max(3.0f, 32.0f * (1.0f - destructionFactor));
+            float steps = std::max(2.0f, 256.0f * std::pow(1.0f - destructionFactor, 3.0f));
 
             float normalizedMag = magnitude / maxMagnitude;
             float quantizedMag = std::round(normalizedMag * steps) / steps;
@@ -325,7 +325,7 @@ void OsarioDelayDestroyerAudioProcessor::processBlock(juce::AudioBuffer<float>& 
 
     // Pre-calcular el factor de destrucción para ahorrar CPU
     float normValue = (16.0f - bitDepth) / 15.0f; // Va de 0.0 a 1.0
-    float destructionFactor = std::pow(normValue, 2.0f) * 0.02f;
+    float destructionFactor = normValue;
     int delayBufferSize = delayBuffer.getNumSamples();
     int localWriteIndex = 0;
 
