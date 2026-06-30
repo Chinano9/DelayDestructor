@@ -39,14 +39,14 @@ OsarioDelayDestroyerAudioProcessorEditor::OsarioDelayDestroyerAudioProcessorEdit
     // Configuración de la etiqueta de advertencia
     dangerLabel.setText("AUTO-OSCILACION", juce::dontSendNotification);
     dangerLabel.setFont(juce::Font(juce::FontOptions(13.0f).withStyle("Bold")));
-    dangerLabel.setColour(juce::Label::textColourId, juce::Colour(0xffff3333)); // Rojo brillante
+    dangerLabel.setColour(juce::Label::textColourId, juce::Colour(OsarioUI::Colours::dangerText)); // Rojo brillante
     dangerLabel.setJustificationType(juce::Justification::centred);
     dangerLabel.setVisible(false); // Oculto al inicio
     addAndMakeVisible(dangerLabel);
 
     // ESCUCHADOR DE EVENTOS (onValueChange)
     feedbackSlider.onValueChange = [this] {
-        if (feedbackSlider.getValue() >= 0.95f)
+        if (feedbackSlider.getValue() >= OsarioUI::feedbackDangerThreshold)
         {
             dangerLabel.setVisible(true);
         }
@@ -76,7 +76,7 @@ OsarioDelayDestroyerAudioProcessorEditor::OsarioDelayDestroyerAudioProcessorEdit
     destructionGroup.setTextLabelPosition(juce::Justification::centred);
     addAndMakeVisible(destructionGroup);
 
-    setSize(700, 450);
+    setSize(OsarioUI::windowWidth, OsarioUI::windowHeight);
 }
 
 OsarioDelayDestroyerAudioProcessorEditor::~OsarioDelayDestroyerAudioProcessorEditor()
@@ -87,8 +87,9 @@ OsarioDelayDestroyerAudioProcessorEditor::~OsarioDelayDestroyerAudioProcessorEdi
 //==============================================================================
 void OsarioDelayDestroyerAudioProcessorEditor::paint (juce::Graphics& g)
 {
-    juce::ColourGradient bgGradient(juce::Colour(0xff2a2a2a), 0.0f, 0.0f,
-        juce::Colour(0xff121212), 0.0f, (float)getHeight(), false);
+    juce::ColourGradient bgGradient(
+        juce::Colour(OsarioUI::Colours::bgTop), 0.0f, 0.0f,
+        juce::Colour(OsarioUI::Colours::bgBottom), 0.0f, (float)getHeight(), false);
     g.setGradientFill(bgGradient);
     g.fillRect(getLocalBounds());
 }
@@ -96,28 +97,30 @@ void OsarioDelayDestroyerAudioProcessorEditor::paint (juce::Graphics& g)
 void OsarioDelayDestroyerAudioProcessorEditor::resized()
 {
     // Margen global
-    auto area = getLocalBounds().reduced(20);
+    auto area = getLocalBounds().reduced(OsarioUI::globalMargin);
 
     // Dividimos la pantalla en dos grandes bloques:
-    auto rightPanel = area.removeFromRight(280);
-    area.removeFromRight(20); 
+    auto rightPanel = area.removeFromRight(OsarioUI::rightPanelWidth);
+    area.removeFromRight(OsarioUI::panelGap);
     auto leftPanel = area;
 
     // --- DIBUJANDO EL LADO IZQUIERDO (Delay, Feedback, Mix y Alarma) ---
 
-    auto dangerArea = leftPanel.removeFromBottom(25);
+    // Reservamos espacio de abajo para la etiqueta de peligro
+    auto dangerArea = leftPanel.removeFromBottom(OsarioUI::labelHeight);
     dangerLabel.setBounds(dangerArea);
 
-    leftPanel.removeFromBottom(10);
+    leftPanel.removeFromBottom(OsarioUI::verticalMargin);
 
     int leftChannelWidth = leftPanel.getWidth() / 3;
-    int spacing = 15;
 
+    // Lambda actualizada con tus constantes
     auto placeFader = [&](juce::Slider& slider, juce::Label& label, juce::Rectangle<int>& targetArea, int width)
         {
             auto channelArea = targetArea.removeFromLeft(width);
-            channelArea.removeFromRight(spacing); 
-            label.setBounds(channelArea.removeFromTop(25));
+            channelArea.removeFromRight(OsarioUI::faderSpacing);
+
+            label.setBounds(channelArea.removeFromTop(OsarioUI::labelHeight));
             slider.setBounds(channelArea);
         };
 
@@ -130,14 +133,15 @@ void OsarioDelayDestroyerAudioProcessorEditor::resized()
 
     destructionGroup.setBounds(rightPanel);
 
-    auto groupInnerArea = rightPanel.reduced(15);
-    groupInnerArea.removeFromTop(20);
+    auto groupInnerArea = rightPanel.reduced(OsarioUI::groupInnerMargin);
+    groupInnerArea.removeFromTop(OsarioUI::groupTitleOffset);
 
-    auto comboArea = groupInnerArea.removeFromBottom(50);
-    cutoffLabel.setBounds(comboArea.removeFromTop(20));
+    // Área del ComboBox de Cutoff
+    auto comboArea = groupInnerArea.removeFromBottom(OsarioUI::comboAreaHeight);
+    cutoffLabel.setBounds(comboArea.removeFromTop(OsarioUI::comboLabelHeight));
     cutoffComboBox.setBounds(comboArea);
 
-    groupInnerArea.removeFromBottom(10);
+    groupInnerArea.removeFromBottom(OsarioUI::verticalMargin);
 
     int rightChannelWidth = groupInnerArea.getWidth() / 2;
 
