@@ -23,27 +23,38 @@ OsarioDelayDestroyerAudioProcessor::OsarioDelayDestroyerAudioProcessor()
     apvts(*this, nullptr, "PARAMETERS", createParameters())
 #endif
 {
+    apvts.state = juce::ValueTree("PARAMETERS");
+
+    
+    delayTimePtr = apvts.getRawParameterValue("DELAYTIME");
+    feedbackPtr = apvts.getRawParameterValue("FEEDBACK");
+    mixPtr = apvts.getRawParameterValue("MIX");
+    harshnessPtr = apvts.getRawParameterValue("HARSHNESS");
+    bitDepthPtr = apvts.getRawParameterValue("BITDEPTH");
+    cutoffPtr = apvts.getRawParameterValue("CUTOFF");
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout OsarioDelayDestroyerAudioProcessor::createParameters()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
 
+
+
     // Nombre interno, Nombre visible, Mínimo, Máximo, Valor por defecto
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "BITDEPTH", "Destruccion (Bits)", 1.0f, 16.0f, 3.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "DELAYTIME", "Tiempo (s)", 0.01f, 2.0f, 0.5f));        // Hasta 2 segundos
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "FEEDBACK", "Retroalimentacion", 0.0f, 1, 0.5f));   
+        "FEEDBACK", "Retroalimentacion", 0.0f, 1.0f, 0.5f));   
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "MIX", "Mezcla (Mix)", 0.0f, 1.0f, 0.5f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "HARSHNESS", "Dureza", 0.0f, 1.0f, 0.5f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        "BITDEPTH", "Destruccion (Bits)", 1.0f, 16.0f, 3.0f));
     params.push_back(std::make_unique<juce::AudioParameterChoice>(//esto seria un switch de 3 posiciones
         "CUTOFF",
         "Cutoff Mode",
-        juce::StringArray{ "Plano (Todo)", "Medios (0.4)", "Agudos (0.75)" }, // Los nombres de tus 3 posiciones
+        juce::StringArray{ "Plano (Todo)", "Medios (0.4)", "Agudos (0.75)" }, 
         0 // El índice por defecto (0 = Plano)
     ));
     return { params.begin(), params.end() };
@@ -283,7 +294,6 @@ float OsarioDelayDestroyerAudioProcessor::processSpectralCrush(int channel, floa
     {
         executeFFTMutilation(channel, destructionFactor, harshness, cutoffValue);
 
-        int hopSize = fftSize / 2;
         std::copy(fifo[channel].begin() + hopSize, fifo[channel].end(), fifo[channel].begin());
         fifoIndex[channel] = hopSize;
     }
@@ -300,14 +310,14 @@ void OsarioDelayDestroyerAudioProcessor::processBlock(juce::AudioBuffer<float>& 
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear(i, 0, buffer.getNumSamples());
 
-    // Cargar parámetros (¡Una sola vez por bloque de audio!)
-    float bitDepth = apvts.getRawParameterValue("BITDEPTH")->load();
-    float delayTime = apvts.getRawParameterValue("DELAYTIME")->load();
-    float feedback = apvts.getRawParameterValue("FEEDBACK")->load();
-    float mix = apvts.getRawParameterValue("MIX")->load();
-    float harshness = apvts.getRawParameterValue("HARSHNESS")->load();
 
-    int cutoffIndex = static_cast<int>(apvts.getRawParameterValue("CUTOFF")->load());
+    float bitDepth = bitDepthPtr->load();
+    float delayTime = delayTimePtr->load();
+    float feedback = feedbackPtr->load();
+    float mix = mixPtr->load();
+    float harshness = harshnessPtr->load();
+    int cutoffIndex = static_cast<int>(cutoffPtr->load());
+
 
     float cutoffValue = 0.0f;
     if (cutoffIndex == 1) cutoffValue = 0.4f;
@@ -318,6 +328,9 @@ void OsarioDelayDestroyerAudioProcessor::processBlock(juce::AudioBuffer<float>& 
     float destructionFactor = std::pow(normValue, 2.0f) * 0.02f;
     int delayBufferSize = delayBuffer.getNumSamples();
     int localWriteIndex = 0;
+
+    // Red de seguridad para no reventar timpanos
+    float internalDrive = 1.2f;
 
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
@@ -335,10 +348,14 @@ void OsarioDelayDestroyerAudioProcessor::processBlock(juce::AudioBuffer<float>& 
 
             // Destruir (FFT MP3 Effect) 
             float processedSample = processSpectralCrush(channel, wetSample, destructionFactor, harshness, cutoffValue);
+
+            float rawFeedback = cleanSample + (processedSample * feedback);
             
+            // Neta evitemos reventar tweeters jej
+            float safeFeedback = std::tanh(rawFeedback * internalDrive);
 
             // Escribir al futuro (Feedback)
-            delayData[localWriteIndex] = cleanSample + (processedSample * feedback);
+            delayData[localWriteIndex] = safeFeedback;
 
             localWriteIndex++;
             if (localWriteIndex >= delayBufferSize)
@@ -361,21 +378,31 @@ bool OsarioDelayDestroyerAudioProcessor::hasEditor() const
 
 juce::AudioProcessorEditor* OsarioDelayDestroyerAudioProcessor::createEditor()
 {
-    return new juce::GenericAudioProcessorEditor(*this);
+    return new OsarioDelayDestroyerAudioProcessorEditor(*this);
 }
 
 //==============================================================================
 void OsarioDelayDestroyerAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-    // You should use this method to store your parameters in the memory block.
-    // You could do that either as raw data, or use the XML or ValueTree classes
-    // as intermediaries to make it easy to save and load complex data.
+    auto state = apvts.copyState();
+
+    std::unique_ptr<juce::XmlElement> xml(state.createXml());
+
+    copyXmlToBinary(*xml, destData);
 }
 
 void OsarioDelayDestroyerAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
-    // You should use this method to restore your parameters from this memory block,
-    // whose contents will have been created by the getStateInformation() call.
+    std::unique_ptr<juce::XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
+
+    if (xmlState != nullptr)
+    {
+       
+        if (xmlState->hasTagName(apvts.state.getType()))
+        {
+            apvts.replaceState(juce::ValueTree::fromXml(*xmlState));
+        }
+    }
 }
 
 //==============================================================================

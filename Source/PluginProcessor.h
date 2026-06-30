@@ -59,12 +59,21 @@ public:
     float processSpectralCrush(int channel, float wetSample, float destructionFactor, float harshness, float cutoffValue);
     void executeFFTMutilation(int channel, float destructionFactor, float harshness, float cutoffValue);
 
+    juce::AudioProcessorValueTreeState apvts;
+
 
 private:
+private:
+    std::atomic<float>* bitDepthPtr{ nullptr };
+    std::atomic<float>* delayTimePtr{ nullptr };
+    std::atomic<float>* feedbackPtr{ nullptr };
+    std::atomic<float>* mixPtr{ nullptr };
+    std::atomic<float>* harshnessPtr{ nullptr };
+    std::atomic<float>* cutoffPtr{ nullptr };
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OsarioDelayDestroyerAudioProcessor)
 
-    juce::AudioProcessorValueTreeState apvts;
+    
 
     // --- CONSTANTES DE ARQUITECTURA ---
     static constexpr int fftOrder = 9;
